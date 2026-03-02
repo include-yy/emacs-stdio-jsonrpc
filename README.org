@@ -2,16 +2,18 @@
 
 A lightweight, header-only JSON-RPC 2.0 server implementation for Windows.
 
-It serves as a bridge between Emacs and Windows-specific capabilities,
-such as hosting Microsoft Edge WebView2 content, by communicating over
-standard input/output (Stdio) using LSP-style framing.
+It serves as a bridge between Emacs and Windows-specific capabilities, such as hosting Microsoft Edge WebView2 content, by communicating over standard input/output (Stdio) using LSP-style framing.
 
-It use [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com/nlohmann/json/releases/tag/v3.12.0][version 3.12.0]]) to parse JSON string.
+It uses [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com/nlohmann/json/releases/tag/v3.12.0][version 3.12.0]]) to parse JSON string.
 
 *Key Features*
 
-- LSP-style framing: Use =Content-Length: {LEN}\r\n{BODY}= to ensure compatibility with Emacs's =jsonrpc.el=
-- =\r\n= Safety: Force Stdio into =_O_BINARY= mode on Windows to prevent =\r\n= translation from breaking byte counts.
+- *LSP-style framing*: Use =Content-Length: {LEN}\r\n\r\n{BODY}=.
+  - ensure compatibility with Emacs's =jsonrpc.el=.
+- =\r\n= Safety: Force stdio into =_O_BINARY= mode on Windows
+  - prevent =\r\n= translation from breaking byte counts.
+
+While primarily optimized to solve Windows-specific I/O quirks, the core JSON-RPC 2.0 logic — including parsing, state management, and message dispatching — is implemented in standard, platform-agnostic C++. It can be readily used on Linux or macOS (Not yet extensively tested on these platforms).
 
 ** Getting Started
 
