@@ -502,11 +502,11 @@ public:
                 // Handle "Global Error" (id: null), usually a Protocol Error from peer.
                 // Log to stderr as it cannot be replied to.
                 const auto& err = std::get<Error>(msg);
-                std::cerr << "[JSON-RPC FATAL ERROR] "
+                err_ << "[JSON-RPC FATAL ERROR] "
                     << "Code: " << err.code
                     << ", Message: " << err.message << std::endl;
                 if (!err.data.is_null()) {
-                    std::cerr << "Data: " << err.data.dump() << std::endl;
+                    err_ << "Data: " << err.data.dump() << std::endl;
                 }
             }
         }

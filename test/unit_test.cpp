@@ -406,8 +406,8 @@ TEST_CASE("Conn: Boundary Errors (Spec Validation)") {
     auto test = [&](std::string input, const char* msg) -> void {
         out.clear();
         in.clear();
-        conn.start();
         write_rpc_packet(in, input);
+        conn.start();
         std::this_thread::sleep_for(10ms);
         conn.process_queue();
         CHECK(out.str().find(msg) != std::string::npos);

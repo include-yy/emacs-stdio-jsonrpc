@@ -14,3 +14,4 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include_directories(include)
 
 add_executable(unit_tests test/unit_test.cpp)
+add_executable(server_test test/server_test.cpp)

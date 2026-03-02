@@ -6,7 +6,7 @@ import time
 
 # Ensure the executable path matches your compiled output location.
 # Example: 'build/Release/jsonrpc.exe' or just 'jsonrpc.exe' if in the same folder.
-EXE_PATH = r"path/to/jsonrpc.exe"
+EXE_PATH = r"..\out\build\x64-Debug\server_test.exe"
 
 def run_test():
     print(f"Starting subprocess: {EXE_PATH}")
