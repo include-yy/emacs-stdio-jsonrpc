@@ -31,7 +31,7 @@ def run_test():
             "id": _id
         }
         json_str = json.dumps(msg)
-        
+
         # Construct LSP-style Header: Content-Length: <len>\r\n\r\n<body>
         # Note: The C++ read_loop handles cases where the body is not followed by \r\n.
         packet = f"Content-Length: {len(json_str)}\r\n\r\n{json_str}".encode('utf-8')
@@ -44,11 +44,11 @@ def run_test():
             line = process.stdout.readline()
             if not line: return None
             line = line.decode('utf-8', errors='ignore').strip()
-            
-            if line == "": 
+
+            if line == "":
                 # Empty line detected, Header section finished
                 break
-            
+
             if line.startswith("Content-Length:"):
                 content_length = int(line.split(":")[1])
 
@@ -69,38 +69,38 @@ def run_test():
         print("PASS")
 
         # --- Test 2: Sticky Packets ---
-        # Simulate Emacs sending two commands instantly; 
+        # Simulate Emacs sending two commands instantly;
         # data is concatenated in the pipe (one write, two messages).
         print("\n[Test 2] Sticky Packets (Two requests in one write)")
         packet1 = make_packet("add", [10, 20], 2)
         packet2 = make_packet("echo", {"msg": "hello"}, 3)
         send_raw(packet1 + packet2) # Write all at once
-        
+
         res1 = read_response()
         print(f"Received 1: {res1}")
         assert res1['result'] == 30
-        
+
         res2 = read_response()
         print(f"Received 2: {res2}")
         assert res2['result']['msg'] == "hello"
         print("PASS")
 
         # --- Test 3: Split Packets ---
-        # Simulate network delay or system buffering; 
+        # Simulate network delay or system buffering;
         # Header and Body are sent/received separately.
         print("\n[Test 3] Split Packets (Header... delay ... Body)")
         packet = make_packet("add", [100, 200], 4)
         split_point = len(packet) - 5 # Cut inside the Body
-        
+
         send_raw(packet[:split_point])
         time.sleep(0.1) # Simulate delay
         send_raw(packet[split_point:])
-        
+
         res = read_response()
         print(f"Received: {res}")
         assert res['result'] == 300
         print("PASS")
-        
+
         print("\nALL TESTS PASSED!")
 
     except Exception as e:
