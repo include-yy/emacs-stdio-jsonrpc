@@ -371,6 +371,9 @@ public:
         if (&output == &std::cout) {
             (void)_setmode(_fileno(stdout), _O_BINARY);
         }
+        if (&error == &std::cerr) {
+            (void)_setmode(_fileno(stderr), _O_BINARY);
+        }
 #endif
     }
 
