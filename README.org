@@ -1,77 +1,119 @@
 * A simple JSON-RPC implementation in C++ for Emacs
 
-A lightweight, header-only JSON-RPC 2.0 server implementation designed
-for Windows.
+A lightweight, header-only JSON-RPC 2.0 server implementation for Windows.
 
 It serves as a bridge between Emacs and Windows-specific capabilities,
 such as hosting Microsoft Edge WebView2 content, by communicating over
-standard input/output (Stdio) using the Language Server Protocol (LSP)
-framing.
+standard input/output (Stdio) using LSP-style framing.
 
-It use [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com/nlohmann/json/releases/tag/v3.12.0][version 3.12.0]]) to parse JSON string. 
+It use [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com/nlohmann/json/releases/tag/v3.12.0][version 3.12.0]]) to parse JSON string.
+
+*Key Features*
+
+- LSP-style framing: Use =Content-Length: {LEN}\r\n{BODY}= to ensure compatibility with Emacs's =jsonrpc.el=
+- =\r\n= Safety: Force Stdio into =_O_BINARY= mode on Windows to prevent =\r\n= translation from breaking byte counts.
 
 ** Getting Started
 
 *Prerequisites*
 
-- Visual Studio with v145 for Microsoft C++ Build Tools, ISO C++20
+- ISO C++20
+- nlohmann/json v3.12.0
 
-Then, Just grab the files from include and drop them into your
-project. Hopefully the code and comments are clear enough for you to
-figure out how the functions work. :)
-
-** Usage
+Then, simply copy =json.hpp= and =jsonrpc.hpp= from =include= directory into your project's include directory.
 
 *C++ Server Side*
 
-Define your methods and start the server. The server runs a background
-thread for reading stdin, while execution happens on your main thread.
+The =Conn= object requires a Waker --- a callback triggered when a new message arrives in the queue.  In a Win32 application, use this to wake up your main message loop.
 
 #+begin_src cpp
   #include "jsonrpc.hpp"
+  #include <windows.h>
 
-  jsonrpc::Conn server;
+  #define WM_JSONRPC_WAKEUP (WM_USER + 1)
 
   int main() {
-      server.register_method("add", [](const jsonrpc::json& params) -> jsonrpc::json {
-          return params[0].get<double>() + params[1].get<double>();
-      });
+      uint32_t main_thread_id = GetCurrentThreadId();
 
+      // 1. Define a Waker to signal the main thread from the reader thread
+      auto waker = [main_thread_id]() {
+          PostThreadMessage(main_thread_id, WM_JSONRPC_WAKEUP, 0, 0);
+          };
+
+      jsonrpc::Conn server(waker);
+
+      // 2. Register a synchronous method
+      server.register_method("add", [](const jsonrpc::json& params) {
+          return params[0].get<double>() + params[1].get<double>();
+          });
+
+      // 3. Register a asynchronous method (non-blocking)
+      // Useful for heavy tasks that should not freeze the main message loop.
+      server.register_async_method("heavy_task", [](jsonrpc::Context ctx, const jsonrpc::json& params) {
+          // Move task to a background thread; 'ctx' and 'params' are captured by value
+          std::thread([ctx, params]() mutable {
+              std::this_thread::sleep_for(std::chrono::seconds(3));
+              ctx.reply("Task Complete!"); // Safely reply from any thread
+              }).detach();
+          });
+
+      // 4. Register an exit notification (no response)
+      server.register_notification("exit", [](const jsonrpc::json&) {
+          PostQuitMessage(0); // Signal the GetMessage loop to terminate.
+          });
+
+      // Start the background I/O reader thread.
       server.start();
 
+      // 5. Standard Win32 Message Loop
       MSG msg;
       while (GetMessage(&msg, nullptr, 0, 0)) {
-          if (msg.message == WM_JSONRPC_MESSAGE) {
+          if (msg.message == WM_JSONRPC_WAKEUP) {
+              // Process the message queue on the main thread
               server.process_queue();
+              // Check if the reader thread died.
+              if (!server.is_running()) {
+                  break;
+              }
           } else {
               TranslateMessage(&msg);
               DispatchMessage(&msg);
           }
       }
+      // 6. Graceful Shutdown Implementation
+      // Note: CancelIoEx provides a non-destructive way to interrupt a blocking stdin read.
+      HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+      if (hIn != INVALID_HANDLE_VALUE) {
+          CancelIoEx(hIn, nullptr); // Forcefully abort pending I/O on the reader thread
+      }
+      server.stop();
       return 0;
   }
 #+end_src
 
 *Emacs Client Side*
 
-Use the built-in jsonrpc.el library to communicate with the generated
-executable.
-
-*Note*: The =:coding 'binary= (or =no-conversion=) is critical on
-Windows. Without it, Emacs may convert =\n= to =\r\n=, breaking the
-=Content-Length= byte counting.
+When connecting from Emacs, *must* set the coding system to binary.  Failure to do so will cause Emacs to convert =\n= to =\r\n=, corrupting the Content-Length calculation.
 
 #+begin_src elisp
   (require 'jsonrpc)
-  (setq rpc (make-instance
-             'jsonrpc-process-connection
-             :name "example"
-             :process (make-process
-                       :name "exe"
-                       :command '("path/to/exe")
-                       :coding 'binary)))
+
+  ;; Change to example.exe's path if needed.
+  (setq path (expand-file-name "../out/build/x64-Debug/example.exe"))
+
+  (setq rpc (let ((proc (make-process :name "example"
+                                      :command `(,path)
+                                      ;; binary is necessary on Windows
+                                      :coding 'binary) ))
+              (make-instance 'jsonrpc-process-connection
+                             :name "jsonrpc-example"
+                             :process proc)))
 
   (jsonrpc-request rpc "add" [1 2])
   ;;=> 3.0
+  (jsonrpc-request rpc "heavy_task" nil)
+  ;;=> Wait 3 seconds
+  (jsonrpc-notify rpc "exit" nil)
+  ;;=> exit subprocess
 #+end_src
 
