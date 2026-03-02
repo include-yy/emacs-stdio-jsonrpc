@@ -2,7 +2,9 @@
 
 A lightweight, header-only JSON-RPC 2.0 server implementation for Windows.
 
-It serves as a bridge between Emacs and Windows-specific capabilities, such as hosting Microsoft Edge WebView2 content, by communicating over standard input/output (Stdio) using LSP-style framing.
+It serves as a bridge between Emacs and Windows-specific capabilities,
+such as hosting Microsoft Edge WebView2 content, by communicating over
+standard input/output (Stdio) using LSP-style framing.
 
 It uses [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com/nlohmann/json/releases/tag/v3.12.0][version 3.12.0]]) to parse JSON string.
 
@@ -13,7 +15,11 @@ It uses [[https://github.com/nlohmann/json][nlohmann/json]]([[https://github.com
 - =\r\n= Safety: Force stdio into =_O_BINARY= mode on Windows
   - prevent =\r\n= translation from breaking byte counts.
 
-While primarily optimized to solve Windows-specific I/O quirks, the core JSON-RPC 2.0 logic — including parsing, state management, and message dispatching — is implemented in standard, platform-agnostic C++. It can be readily used on Linux or macOS (Not yet extensively tested on these platforms).
+While primarily optimized to solve Windows-specific I/O quirks, the core
+JSON-RPC 2.0 logic — including parsing, state management, and message
+dispatching — is implemented in standard, platform-agnostic C++. It can
+be readily used on Linux or macOS (Not yet extensively tested on these
+platforms).
 
 ** Getting Started
 
@@ -22,11 +28,14 @@ While primarily optimized to solve Windows-specific I/O quirks, the core JSON-RP
 - ISO C++20
 - nlohmann/json v3.12.0
 
-Then, simply copy =json.hpp= and =jsonrpc.hpp= from =include= directory into your project's include directory.
+Then, simply copy =json.hpp= and =jsonrpc.hpp= from =include= directory
+into your project's include directory.
 
 *C++ Server Side*
 
-The =Conn= object requires a Waker --- a callback triggered when a new message arrives in the queue.  In a Win32 application, use this to wake up your main message loop.
+The =Conn= object requires a Waker --- a callback triggered when a new
+message arrives in the queue.  In a Win32 application, use this to wake
+up your main message loop.
 
 #+begin_src cpp
   #include "jsonrpc.hpp"
@@ -95,7 +104,9 @@ The =Conn= object requires a Waker --- a callback triggered when a new message a
 
 *Emacs Client Side*
 
-When connecting from Emacs, *must* set the coding system to binary.  Failure to do so will cause Emacs to convert =\n= to =\r\n=, corrupting the Content-Length calculation.
+When connecting from Emacs, *must* set the coding system to binary.
+Failure to do so will cause Emacs to convert =\n= to =\r\n=, corrupting
+the Content-Length calculation.
 
 #+begin_src elisp
   (require 'jsonrpc)
@@ -123,17 +134,19 @@ When connecting from Emacs, *must* set the coding system to binary.  Failure to 
 
 *Namespace*: =jsonrpc=
 
-All core functionality resides within the =jsonrpc= namespace. This includes the main connection class, message structures, and standard error specifications.
+All core functionality resides within the =jsonrpc= namespace. This
+includes the main connection class, message structures, and standard
+error specifications.
 
 *** *Class* =jsonrpc::Conn=
 
 The primary interface for managing JSON-RPC communication over standard I/O.
 
 #+begin_src cpp
-  Conn(Waker waker, 
-       std::istream& input = std::cin, 
-       std::ostream& output = std::cout, 
-       std::ostream& error = std::cerr, 
+  Conn(Waker waker,
+       std::istream& input = std::cin,
+       std::ostream& output = std::cout,
+       std::ostream& error = std::cerr,
        size_t max_pkg_size = kDefaultMaxContentLength);
 #+end_src
 
@@ -158,13 +171,17 @@ The primary interface for managing JSON-RPC communication over standard I/O.
 - =void register_notification(const std::string& name, NotificationHandler handler)=: Registers a handler for notifications (requests without an =id=).
 - =handler=: =std::function<void(const json& params)>=.
 
+*Advanced Interception*
+
+- =using RawHandler = std::function<bool(const IncomingMessage&, Conn&)>=: A function type for intercepting messages before they are dispatched.
+- =void set_raw_handler(RawHandler handler)=: Registers an interceptor. If the handler returns =true=, the message is considered "consumed" and standard dispatch is skipped.
+- =using IncomingMessage = std::variant<Request, Response, Error>=: The type passed to the raw handler representing any valid JSON-RPC message.
+
 *Execution & Outbound*
 
 - =void process_queue()=: Drains the inbox queue and executes the corresponding handlers. *Must be called on the thread where you want your business logic to run*.
-
 - =void send_request(const std::string& method, const json& params, ResponseHandler callback)=: Sends a request to the client. The =callback= is executed when a response with the matching =id= is processed.
-
-- =void send_notification(const std::string& method, const json& params)=: Sends a notification to the client.  
+- =void send_notification(const std::string& method, const json& params)=: Sends a notification to the client.
 
 *** *Class* =jsonrpc::Context=
 
@@ -189,41 +206,36 @@ Throw this inside a registered method to return a specific JSON-RPC error to the
 These are the data structures used internally for serialization and passed to handlers.
 
 - =Request=: Contains =std::optional<int> id=, =std::string method=, and =json params=.
-
 - =Response=: Contains =int id= and a variant of =json= (result) or =Error= (failure).
-
 - =Error=: Contains =int code=, =std::string message=, and optional =json data=.
 
-*** Advanced Interception
-
-- =using RawHandler = std::function<bool(const IncomingMessage&, Conn&)>=: A function type for intercepting messages before they are dispatched.
-- =void set_raw_handler(RawHandler handler)=: Registers an interceptor. If the handler returns =true=, the message is considered "consumed" and standard dispatch is skipped.
-- =using IncomingMessage = std::variant<Request, Response, Error>=: The type passed to the raw handler representing any valid JSON-RPC message.
-
 ** Precautions
-
 *** Graceful Shutdown via EOF
 
-The =read_loop= is designed to terminate automatically upon receiving an EOF signal from the input stream. In an Emacs context, the most natural way to shut down the server is for the client (Emacs) to send EOF(=process-send-eof=), which triggers an EOF on the C++ side's =stdin=.
+The =read_loop= is designed to terminate automatically upon receiving an
+EOF signal from the input stream. In an Emacs context, the most natural
+way to shut down the server is for the client (Emacs) to send
+EOF(=process-send-eof=), which triggers an EOF on the C++ side's
+=stdin=.
 
 *** Avoid Standard Output
 
-Since the library uses =stdout= as the primary communication channel for JSON-RPC packets, never use =std::cout= (or =printf=) for logging or debugging. Doing so will inject plain text into the binary stream, causing the Emacs side to fail parsing. Use =std::cerr= for all logging.
+Since the library uses =stdout= as the primary communication channel for
+JSON-RPC packets, never use =std::cout= (or =printf=) for logging or
+debugging. Doing so will inject plain text into the binary stream,
+causing the Emacs side to fail parsing. Use =std::cerr= for all logging.
 
 *** Threading and Lifecycle
 
 - Handler Execution: All methods registered via =register_method= or =register_async_method= are executed inside =process_queue()=. This ensures your business logic runs on the thread that calls that function (usually the main UI thread).
-
 - Thread Safety: While =Context::reply()= and =Context::error()= are thread-safe (utilizing =std::osyncstream=), registration methods like =register_method= must be called before calling =start()=.
-
 - The Waker: The =Waker= callback is executed on the background reader thread. It should only be used to signal the main thread (e.g., via =PostThreadMessage=) and should not perform heavy logic.
 
 *** Windows Stdio Quirks
 
 - Binary Mode: The library automatically sets =stdin/stdout/stderr= to =_O_BINARY=. If you bypass the library to read or write to these streams, ensure you do not change the mode back to text, as it will corrupt the =Content-Length= byte counts.
+- Graceful Exit: To shut down cleanly without waiting for an EOF from Emacs, you can use =CancelIoEx= as shown in the example to unblock the thread before calling =stop()=.
 
-- Graceful Exit: On Windows, the reader thread often blocks on a synchronous =ReadFile= call. To shut down cleanly without waiting for an EOF from Emacs, you must use =CancelIoEx= as shown in the example to unblock the thread before calling =stop()=.
-  
 *** Protocol Constraints
 
 - Packet Size: The default maximum packet size is 16MB. If you are transmitting large data (like high-res images or large buffers), increase this limit in the =Conn= constructor.
@@ -232,7 +244,8 @@ Since the library uses =stdout= as the primary communication channel for JSON-RP
 
 *** Error Codes
 
-While the library handles protocol-level errors automatically, you can refer to the =jsonrpc::spec= namespace for standard codes:
+While the library handles protocol-level errors automatically, you can
+refer to the =jsonrpc::spec= namespace for standard codes:
 
 - =-32700=: Parse error (Invalid JSON).
 - =-32600=: Invalid Request.
